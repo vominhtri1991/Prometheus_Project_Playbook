@@ -1,0 +1,127 @@
+- name: Deploy Prometheus Server And Linux Exporter
+  hosts: monitor
+  become: true
+  vars:
+    prometheus_paths:
+      - /source/Prometheus/
+      - /etc/prometheus
+      - /var/lib/prometheus
+    prometheus_role: prometheus
+    exporter_role: exporter
+    scrape_interval: 30s 
+  tasks:
+    - name: Setup hostname for all hosts
+      hostname:
+        name: "{{hostname}}"
+
+    - name: Print group name of current host
+      debug:
+       msg: "{{hostvars[inventory_hostname].group_names}}"
+
+    - name: Deploy Node Exporter
+      block:
+        - name: Create user running Node Exporter service
+          user:
+            name: prometheus
+            shell: /sbin/nologin
+            state: present
+        
+        - name: Create node exporter source path
+          file:
+            state: directory
+            path: /source/Prometheus/
+            mode: 0755
+            owner: prometheus
+            group: prometheus
+        
+        - name: Download Node Exporter Source
+          get_url:
+            url: https://github.com/prometheus/node_exporter/releases/download/v0.16.0-rc.1/node_exporter-0.16.0-rc.1.linux-amd64.tar.gz
+            dest: /source/Prometheus/node_exporter-0.16.0-rc.1.linux-amd64.tar.gz
+
+        - name: Unarchive Node Exporter Source
+          unarchive:
+            src: /source/Prometheus/node_exporter-0.16.0-rc.1.linux-amd64.tar.gz
+            dest: /source/Prometheus
+            remote_src: yes
+            extra_opts: [--strip-components=1]
+            mode: 0755
+            group: prometheus
+            owner: prometheus
+
+        - name: Copy systemd service configuration file template
+          copy:
+            src: template/node-exporter.service
+            dest: /etc/systemd/system/node-exporter.service
+            mode: 0755
+
+        - name: Systemd Daemon Reload
+          systemd:
+            daemon_reload: yes
+
+        - name: Start Prometheus Service
+          service:
+            name: node-exporter
+            state: restarted
+
+      when: exporter_role in hostvars[inventory_hostname].group_names
+
+    - name: Deploy Prometheus Server
+      block:
+        - name: Create user running Prometheus service
+          user:
+            name: prometheus
+            shell: /sbin/nologin
+            state: present
+             
+        - name: Create folder structure for Prometheus package
+          file:
+            state: directory
+            path: "{{ item }}"
+            mode: 0755
+            owner: prometheus
+            group: prometheus
+          loop: "{{ prometheus_paths }}"
+
+        - name: Download Prometheus Source
+          get_url:
+            url: https://github.com/prometheus/prometheus/releases/download/v2.23.0/prometheus-2.23.0.linux-amd64.tar.gz
+            dest: /source/Prometheus/prometheus-2.23.0.tar.gz
+
+        - name: Unarchive Prometheus Source
+          unarchive:
+            src: /source/Prometheus/prometheus-2.23.0.tar.gz
+            dest: /source/Prometheus
+            remote_src: yes
+            extra_opts: [--strip-components=1]
+            mode: 0755
+            group: prometheus
+            owner: prometheus
+
+        - name: Copy Source And Binary file For Prometheus Service
+          script:
+            cmd: copy.sh
+       
+        - name: Deploy Prometheus Configuration With ALl Target Use teamplate file
+          template:
+            src: template/prometheus.yml
+            dest: /etc/prometheus/prometheus.yml
+
+        - name: Copy systemd service configuration file template
+          copy:
+            src: template/prometheus.service
+            dest: /etc/systemd/system/prometheus.service
+            mode: 0755
+
+        - name: Systemd Daemon Reload
+          systemd:
+            daemon_reload: yes
+
+        - name: Start Prometheus Service
+          service:
+            name: prometheus
+            state: restarted 
+
+      when: prometheus_role in hostvars[inventory_hostname].group_names
+
+   

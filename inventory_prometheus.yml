@@ -1,0 +1,19 @@
+prometheus:
+  hosts:
+    node01:
+      ansible_host: 192.168.129.120
+      hostname: prometheus-server
+
+exporter:
+  hosts:
+    node02:
+      ansible_host: 192.168.129.121
+      hostname: web01-exporter
+    node03:
+      ansible_host: 192.168.129.122
+      hostname: web02-exporter
+
+monitor:
+  children:
+    prometheus:
+    exporter:
